@@ -21,28 +21,23 @@ public class BinaryNetworksService : IBinaryNetworksService
         _unitOfWork = unitOfWork;
     }
 
-    public async Task<IEnumerable<BinaryNetworkResult>> GetAsync(CancellationToken cancellationToken = default)
+    public async Task<IEnumerable<BinaryNetworkShortResult>> GetAsync(CancellationToken cancellationToken = default)
     {
         var networks = await _unitOfWork.BinaryNetworks.GetAllAsync(cancellationToken);
 
         if (networks.Count == 0)
-            return Enumerable.Empty<BinaryNetworkResult>();
+            return Enumerable.Empty<BinaryNetworkShortResult>();
 
-        var result = new List<BinaryNetworkResult>();
+        var result = new List<BinaryNetworkShortResult>();
         
         foreach (var network in networks)
         {
-            var networkJson = await _fileStorageService.DownloadAsync(network.NetworkBlobName, "networks", cancellationToken);
-            
-            var networkData = JsonConvert.DeserializeObject<BinaryNetworkResult.BinaryNetwork>(networkJson);
-            
-            var resultItem = new BinaryNetworkResult
+            var resultItem = new BinaryNetworkShortResult
             {
                 Id = network.Id,
-                Name = network.Name,
+                NetworkName = network.Name,
                 PreviewImageUrl = network.PreviewImageUrl,
                 CreatedAt = network.CreatedAt,
-                Network = networkData
             };
 
             result.Add(resultItem);
@@ -65,7 +60,7 @@ public class BinaryNetworksService : IBinaryNetworksService
         var result = new BinaryNetworkResult
         {
             Id = network.Id,
-            Name = network.Name,
+            NetworkName = network.Name,
             PreviewImageUrl = network.PreviewImageUrl,
             CreatedAt = network.CreatedAt,
             Network = networkData

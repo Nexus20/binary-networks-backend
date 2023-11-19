@@ -1,12 +1,7 @@
-﻿using BinaryNetworks.Application.Models.Results.Abstract;
+﻿namespace BinaryNetworks.Application.Models.Results.BinaryNetworks;
 
-namespace BinaryNetworks.Application.Models.Results.BinaryNetworks;
-
-public class BinaryNetworkResult : BaseResult
+public class BinaryNetworkResult : BinaryNetworkShortResult
 {
-    public string Name { get; set; } = null!;
-    public string? PreviewImageUrl { get; set; }
-    
     public BinaryNetwork Network { get; set; } = null!;
 
     public class BinaryNetwork

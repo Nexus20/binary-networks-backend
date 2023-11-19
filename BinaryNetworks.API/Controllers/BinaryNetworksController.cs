@@ -1,7 +1,9 @@
-﻿using BinaryNetworks.Application.Interfaces.Services.BinaryNetworks;
+﻿using System.Text;
+using BinaryNetworks.Application.Interfaces.Services.BinaryNetworks;
 using BinaryNetworks.Application.Models.Requests.BinaryNetworks;
 using BinaryNetworks.Application.Models.Results.BinaryNetworks;
 using Microsoft.AspNetCore.Mvc;
+using Newtonsoft.Json;
 
 namespace BinaryNetworks.API.Controllers;
 
@@ -38,6 +40,31 @@ public class BinaryNetworksController : ControllerBase
     [Consumes("application/json")]
     public async Task<IActionResult> SaveAsync([FromBody]SaveBinaryNetworkRequest request)
     {
+        await _binaryNetworksService.SaveAsync(request);
+        
+        return NoContent();
+    }
+    
+    [HttpPost("export")]
+    [Consumes("application/json")]
+    public IActionResult ExportAsync([FromBody]SaveBinaryNetworkRequest request)
+    {
+        var json = JsonConvert.SerializeObject(request, Formatting.Indented);
+        var fileName = $"{request.NetworkName}.json";
+
+        return File(Encoding.UTF8.GetBytes(json), "application/json", fileName);
+    }
+
+    [HttpPost("import")]
+    public async Task<IActionResult> ImportAsync([FromForm] IFormFile file)
+    {
+        await using var stream = file.OpenReadStream();
+        using var reader = new StreamReader(stream);
+        var json = await reader.ReadToEndAsync();
+        
+        var request = JsonConvert.DeserializeObject<SaveBinaryNetworkRequest>(json);
+        request.Id = null;
+        
         await _binaryNetworksService.SaveAsync(request);
         
         return NoContent();
