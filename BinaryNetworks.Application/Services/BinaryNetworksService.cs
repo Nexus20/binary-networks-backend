@@ -2,23 +2,26 @@ using System.Text;
 using BinaryNetworks.Application.Exceptions;
 using BinaryNetworks.Application.Interfaces.FileStorage;
 using BinaryNetworks.Application.Interfaces.Persistence;
+using BinaryNetworks.Application.Interfaces.Services.BinaryNetworks;
 using BinaryNetworks.Application.Models.Dtos.Files;
 using BinaryNetworks.Application.Models.Requests.BinaryNetworks;
 using BinaryNetworks.Application.Models.Results.BinaryNetworks;
 using BinaryNetworks.Domain.Entities;
 using Newtonsoft.Json;
 
-namespace BinaryNetworks.Application.Interfaces.Services.BinaryNetworks;
+namespace BinaryNetworks.Application.Services;
 
 public class BinaryNetworksService : IBinaryNetworksService
 {
     private readonly IFileStorageService _fileStorageService;
+    private readonly IFileStorageService2 _fileStorageService2;
     private readonly IUnitOfWork _unitOfWork;
 
-    public BinaryNetworksService(IFileStorageService fileStorageService, IUnitOfWork unitOfWork)
+    public BinaryNetworksService(IFileStorageService fileStorageService, IUnitOfWork unitOfWork, IFileStorageService2 fileStorageService2)
     {
         _fileStorageService = fileStorageService;
         _unitOfWork = unitOfWork;
+        _fileStorageService2 = fileStorageService2;
     }
 
     public async Task<IEnumerable<BinaryNetworkShortResult>> GetAsync(CancellationToken cancellationToken = default)
@@ -53,7 +56,7 @@ public class BinaryNetworksService : IBinaryNetworksService
         if (network is null)
             throw new NotFoundException(nameof(BinaryNetwork), id);
 
-        var networkJson = await _fileStorageService.DownloadAsync(network.NetworkBlobName, "networks", cancellationToken);
+        var networkJson = await _fileStorageService2.DownloadAsync(network.NetworkFileId);
             
         var networkData = JsonConvert.DeserializeObject<BinaryNetworkResult.BinaryNetwork>(networkJson);
             
@@ -82,21 +85,20 @@ public class BinaryNetworksService : IBinaryNetworksService
 
     private async Task CreateAsync(SaveBinaryNetworkRequest request, CancellationToken cancellationToken = default)
     {
-        var networkFileUrl = await UploadNetworkFileAsync(request);
+        var networkFileId = await UploadNetworkFileAsync(request);
 
         var entity = new BinaryNetwork()
         {
             Name = request.NetworkName,
-            NetworkFileUrl = networkFileUrl.Urls.First().Url,
-            NetworkBlobName = networkFileUrl.Urls.First().BlobName,
+            NetworkFileId = networkFileId,
             CreatedAt = DateTime.UtcNow
         };
 
         if (!string.IsNullOrWhiteSpace(request.PreviewImageBase64))
         {
-            var previewImageUrl = await UploadPreviewImageAsync(request);
-            entity.PreviewImageUrl = previewImageUrl.Urls.First().Url;
-            entity.PreviewImageBlobName = previewImageUrl.Urls.First().BlobName;
+            var previewImageInfo = await UploadPreviewImageAsync(request);
+            entity.PreviewImageFileId = previewImageInfo.Item1;
+            entity.PreviewImageUrl = previewImageInfo.Item2;
         }
 
         await _unitOfWork.BinaryNetworks.AddAsync(entity, cancellationToken);
@@ -110,22 +112,19 @@ public class BinaryNetworksService : IBinaryNetworksService
         if (binaryNetwork is null)
             throw new NotFoundException(nameof(BinaryNetwork), request.Id!);
         
-        var networkFileUrl = await UploadNetworkFileAsync(request, binaryNetwork.NetworkBlobName);
-        
-        binaryNetwork.Name = request.NetworkName;
-        binaryNetwork.NetworkFileUrl = networkFileUrl.Urls.First().Url;
+        await UploadNetworkFileAsync(request, binaryNetwork.NetworkFileId);
         
         if (!string.IsNullOrWhiteSpace(request.PreviewImageBase64))
         {
-            var previewImageUrl = await UploadPreviewImageAsync(request, binaryNetwork.PreviewImageBlobName);
-            binaryNetwork.PreviewImageUrl = previewImageUrl.Urls.First().Url;
+            var previewImageInfo = await UploadPreviewImageAsync(request, binaryNetwork.PreviewImageFileId);
+            binaryNetwork.PreviewImageUrl = previewImageInfo.Item2;
         }
         
         _unitOfWork.BinaryNetworks.Update(binaryNetwork);
         await _unitOfWork.SaveChangesAsync(cancellationToken);
     }
 
-    private async Task<UrlsDto> UploadNetworkFileAsync(SaveBinaryNetworkRequest request, string? blobName = null)
+    private async Task<string> UploadNetworkFileAsync(SaveBinaryNetworkRequest request, string? existingFileId = null)
     {
         var json = JsonConvert.SerializeObject(request.Network);
 
@@ -137,16 +136,13 @@ public class BinaryNetworksService : IBinaryNetworksService
             Content = jsonMemoryStream,
             Name = request.NetworkName + ".json"
         };
-            
-        var result = await _fileStorageService.UploadAsync(new List<FileDto> { dto }, "networks", blobName);
-            
-        if (result is null)
-            throw new Exception("Error while uploading file to storage");
+        
+       var fileId = await _fileStorageService2.UploadAsync(dto, "networks", existingFileId);
 
-        return result;
+        return fileId;
     }
     
-    private async Task<UrlsDto> UploadPreviewImageAsync(SaveBinaryNetworkRequest request, string? blobName = null)
+    private async Task<(string, string)> UploadPreviewImageAsync(SaveBinaryNetworkRequest request, string? existingFileId = null)
     {
         var base64EncodedBytes = request.PreviewImageBase64!.Replace("data:image/png;base64,", "");
         var imageBytes = Convert.FromBase64String(base64EncodedBytes);
@@ -160,11 +156,10 @@ public class BinaryNetworksService : IBinaryNetworksService
             Name = request.NetworkName + ".png"
         };
             
-        var result = await _fileStorageService.UploadAsync(new List<FileDto> { dto }, "previews", blobName);
-            
-        if (result is null)
-            throw new Exception("Error while uploading file to storage");
+        var fileId = await _fileStorageService2.UploadAsync(dto, "previews", existingFileId);
 
-        return result;
+        var url = await _fileStorageService2.ShareAsync(fileId);
+
+        return (fileId, url);
     }
 }

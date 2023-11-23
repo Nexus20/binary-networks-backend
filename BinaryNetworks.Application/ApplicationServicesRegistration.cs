@@ -1,5 +1,6 @@
 ﻿using System.Reflection;
 using BinaryNetworks.Application.Interfaces.Services.BinaryNetworks;
+using BinaryNetworks.Application.Services;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 
