@@ -20,4 +20,8 @@
         <PackageReference Include="Microsoft.Extensions.Localization" Version="6.0.16" />
     </ItemGroup>
 
+    <ItemGroup>
+      <Folder Include="Interfaces\FileStorage\" />
+    </ItemGroup>
+
 </Project>

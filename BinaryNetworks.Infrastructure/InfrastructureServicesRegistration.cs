@@ -1,18 +1,12 @@
 ﻿using System.Reflection;
-using Azure.Storage.Blobs;
-using BinaryNetworks.Application.Interfaces.FileStorage;
 using BinaryNetworks.Application.Interfaces.Persistence;
 using BinaryNetworks.Application.Interfaces.Services;
 using BinaryNetworks.Application.Interfaces.Services.Identity;
 using BinaryNetworks.Infrastructure.Auth;
-using BinaryNetworks.Infrastructure.FileStorage;
 using BinaryNetworks.Infrastructure.Identity;
 using BinaryNetworks.Infrastructure.Identity.Services;
 using BinaryNetworks.Infrastructure.Persistence;
 using BinaryNetworks.Infrastructure.Repositories;
-using Google.Apis.Auth.OAuth2;
-using Google.Apis.Drive.v3;
-using Google.Apis.Services;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.AspNetCore.Identity.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore;
@@ -48,23 +42,6 @@ public static class InfrastructureServicesRegistration
 
         services.AddScoped<IRoleService, RoleService>();
         services.AddScoped<IUserService, UserService>();
-        
-        var blobStorageConnectionString = configuration.GetValue<string>("BlobStorageSettings:ConnectionString");
-        services.AddSingleton(_ => new BlobServiceClient(blobStorageConnectionString));
-        services.AddScoped<IFileStorageService, BlobStorageService>();
-
-        services.AddSingleton(_ =>
-        {
-            const string serviceAccountKeyFilePath = "service_account.json";
-            var credential = GoogleCredential.FromFile(serviceAccountKeyFilePath).CreateScoped(DriveService.Scope.Drive);
-
-            return new DriveService(new BaseClientService.Initializer()
-            {
-                HttpClientInitializer = credential
-            });
-        });
-        
-        services.AddScoped<IFileStorageService2, GoogleDriveService>();
 
         return services;
     }

@@ -1,9 +1,6 @@
-using System.Text;
 using BinaryNetworks.Application.Exceptions;
-using BinaryNetworks.Application.Interfaces.FileStorage;
 using BinaryNetworks.Application.Interfaces.Persistence;
 using BinaryNetworks.Application.Interfaces.Services.BinaryNetworks;
-using BinaryNetworks.Application.Models.Dtos.Files;
 using BinaryNetworks.Application.Models.Requests.BinaryNetworks;
 using BinaryNetworks.Application.Models.Results.BinaryNetworks;
 using BinaryNetworks.Domain.Entities;
@@ -13,15 +10,11 @@ namespace BinaryNetworks.Application.Services;
 
 public class BinaryNetworksService : IBinaryNetworksService
 {
-    private readonly IFileStorageService _fileStorageService;
-    private readonly IFileStorageService2 _fileStorageService2;
     private readonly IUnitOfWork _unitOfWork;
 
-    public BinaryNetworksService(IFileStorageService fileStorageService, IUnitOfWork unitOfWork, IFileStorageService2 fileStorageService2)
+    public BinaryNetworksService(IUnitOfWork unitOfWork)
     {
-        _fileStorageService = fileStorageService;
         _unitOfWork = unitOfWork;
-        _fileStorageService2 = fileStorageService2;
     }
 
     public async Task<IEnumerable<BinaryNetworkShortResult>> GetAsync(CancellationToken cancellationToken = default)
@@ -39,8 +32,9 @@ public class BinaryNetworksService : IBinaryNetworksService
             {
                 Id = network.Id,
                 NetworkName = network.Name,
-                PreviewImageUrl = network.PreviewImageUrl,
+                PreviewImageUrl = ConvertBytesToPreviewImageBase64(network.PreviewImage),
                 CreatedAt = network.CreatedAt,
+                UpdatedAt = network.UpdatedAt
             };
 
             result.Add(resultItem);
@@ -55,17 +49,16 @@ public class BinaryNetworksService : IBinaryNetworksService
 
         if (network is null)
             throw new NotFoundException(nameof(BinaryNetwork), id);
-
-        var networkJson = await _fileStorageService2.DownloadAsync(network.NetworkFileId);
             
-        var networkData = JsonConvert.DeserializeObject<BinaryNetworkResult.BinaryNetwork>(networkJson);
+        var networkData = JsonConvert.DeserializeObject<BinaryNetworkResult.BinaryNetwork>(network.BinaryNetworkJson);
             
         var result = new BinaryNetworkResult
         {
             Id = network.Id,
             NetworkName = network.Name,
-            PreviewImageUrl = network.PreviewImageUrl,
+            PreviewImageUrl = ConvertBytesToPreviewImageBase64(network.PreviewImage),
             CreatedAt = network.CreatedAt,
+            UpdatedAt = network.UpdatedAt,
             Network = networkData
         };
 
@@ -85,21 +78,12 @@ public class BinaryNetworksService : IBinaryNetworksService
 
     private async Task CreateAsync(SaveBinaryNetworkRequest request, CancellationToken cancellationToken = default)
     {
-        var networkFileId = await UploadNetworkFileAsync(request);
-
         var entity = new BinaryNetwork()
         {
             Name = request.NetworkName,
-            NetworkFileId = networkFileId,
-            CreatedAt = DateTime.UtcNow
+            BinaryNetworkJson = JsonConvert.SerializeObject(request.Network),
+            PreviewImage = ConvertImageBase64ToBytes(request.PreviewImageBase64)
         };
-
-        if (!string.IsNullOrWhiteSpace(request.PreviewImageBase64))
-        {
-            var previewImageInfo = await UploadPreviewImageAsync(request);
-            entity.PreviewImageFileId = previewImageInfo.Item1;
-            entity.PreviewImageUrl = previewImageInfo.Item2;
-        }
 
         await _unitOfWork.BinaryNetworks.AddAsync(entity, cancellationToken);
         await _unitOfWork.SaveChangesAsync(cancellationToken);
@@ -112,54 +96,29 @@ public class BinaryNetworksService : IBinaryNetworksService
         if (binaryNetwork is null)
             throw new NotFoundException(nameof(BinaryNetwork), request.Id!);
         
-        await UploadNetworkFileAsync(request, binaryNetwork.NetworkFileId);
-        
-        if (!string.IsNullOrWhiteSpace(request.PreviewImageBase64))
-        {
-            var previewImageInfo = await UploadPreviewImageAsync(request, binaryNetwork.PreviewImageFileId);
-            binaryNetwork.PreviewImageUrl = previewImageInfo.Item2;
-        }
+        binaryNetwork.Name = request.NetworkName;
+        binaryNetwork.BinaryNetworkJson = JsonConvert.SerializeObject(request.Network);
+        binaryNetwork.PreviewImage = ConvertImageBase64ToBytes(request.PreviewImageBase64);
         
         _unitOfWork.BinaryNetworks.Update(binaryNetwork);
         await _unitOfWork.SaveChangesAsync(cancellationToken);
     }
-
-    private async Task<string> UploadNetworkFileAsync(SaveBinaryNetworkRequest request, string? existingFileId = null)
-    {
-        var json = JsonConvert.SerializeObject(request.Network);
-
-        using var jsonMemoryStream = new MemoryStream(Encoding.UTF8.GetBytes(json));
-        
-        var dto = new FileDto()
-        {
-            ContentType = "application/json",
-            Content = jsonMemoryStream,
-            Name = request.NetworkName + ".json"
-        };
-        
-       var fileId = await _fileStorageService2.UploadAsync(dto, "networks", existingFileId);
-
-        return fileId;
-    }
     
-    private async Task<(string, string)> UploadPreviewImageAsync(SaveBinaryNetworkRequest request, string? existingFileId = null)
+    private string? ConvertBytesToPreviewImageBase64(byte[]? bytes)
     {
-        var base64EncodedBytes = request.PreviewImageBase64!.Replace("data:image/png;base64,", "");
-        var imageBytes = Convert.FromBase64String(base64EncodedBytes);
-            
-        using var imageMemoryStream = new MemoryStream(imageBytes);
+        if (bytes is null)
+            return null;
         
-        var dto = new FileDto()
-        {
-            ContentType = "image/png",
-            Content = imageMemoryStream,
-            Name = request.NetworkName + ".png"
-        };
-            
-        var fileId = await _fileStorageService2.UploadAsync(dto, "previews", existingFileId);
+        var imageBase64 = Convert.ToBase64String(bytes);
+        return $"data:image/png;base64,{imageBase64}";
+    }
 
-        var url = await _fileStorageService2.ShareAsync(fileId);
-
-        return (fileId, url);
+    private byte[]? ConvertImageBase64ToBytes(string? imageBase64)
+    {
+        if (string.IsNullOrWhiteSpace(imageBase64))
+            return null;
+        
+        var base64EncodedBytes = imageBase64.Replace("data:image/png;base64,", "");
+        return Convert.FromBase64String(base64EncodedBytes);
     }
 }
