@@ -45,6 +45,23 @@ public class BinaryNetworksController : ControllerBase
         return NoContent();
     }
     
+    [HttpDelete("{id}")]
+    public async Task<IActionResult> DeleteAsync(string id, CancellationToken cancellationToken)
+    {
+        await _binaryNetworksService.DeleteAsync(id, cancellationToken);
+        
+        return NoContent();
+    }
+    
+    [HttpPatch("{id}/rename")]
+    [Consumes("application/json")]
+    public async Task<IActionResult> RenameAsync(string id, [FromBody]RenameBinaryNetworkRequest request, CancellationToken cancellationToken)
+    {
+        await _binaryNetworksService.RenameAsync(id, request.NetworkName, cancellationToken);
+        
+        return NoContent();
+    }
+    
     [HttpPost("export")]
     [Consumes("application/json")]
     public IActionResult ExportAsync([FromBody]SaveBinaryNetworkRequest request)

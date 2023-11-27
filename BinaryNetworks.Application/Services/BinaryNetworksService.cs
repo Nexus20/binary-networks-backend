@@ -65,6 +65,29 @@ public class BinaryNetworksService : IBinaryNetworksService
         return result;
     }
     
+    public async Task DeleteAsync(string id, CancellationToken cancellationToken = default)
+    {
+        var network = await _unitOfWork.BinaryNetworks.GetByIdAsync(id, cancellationToken);
+
+        if (network is null)
+            throw new NotFoundException(nameof(BinaryNetwork), id);
+        
+        _unitOfWork.BinaryNetworks.Remove(network);
+        await _unitOfWork.SaveChangesAsync(cancellationToken);
+    }
+    
+    public async Task RenameAsync(string id, string newName, CancellationToken cancellationToken = default)
+    {
+        var network = await _unitOfWork.BinaryNetworks.GetByIdAsync(id, cancellationToken);
+
+        if (network is null)
+            throw new NotFoundException(nameof(BinaryNetwork), id);
+        
+        network.Name = newName;
+        _unitOfWork.BinaryNetworks.Update(network);
+        await _unitOfWork.SaveChangesAsync(cancellationToken);
+    }
+    
     public async Task SaveAsync(SaveBinaryNetworkRequest request, CancellationToken cancellationToken = default)
     {
         if (!string.IsNullOrWhiteSpace(request.Id))
